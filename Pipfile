@@ -10,6 +10,8 @@ django-debug-toolbar = "*"
 python-dotenv = "*"
 mysqlclient = "*"
 djoser = "*"
+pillow = "*"
+faker = "*"
 
 [dev-packages]
 
