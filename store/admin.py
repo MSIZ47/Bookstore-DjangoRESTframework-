@@ -146,3 +146,8 @@ class AddressAdmin(admin.ModelAdmin):
 class CommentAdmin(admin.ModelAdmin):
     list_display = ['body', 'book', 'status']
     autocomplete_fields = ['book']
+
+
+@admin.register(BookImage)
+class BookImageAdmin(admin.ModelAdmin):
+    list_display = [ 'image']

@@ -58,7 +58,7 @@ class Customer(models.Model):
 
 
 class Address(models.Model):
-    customer = models.OneToOneField(Customer, on_delete=models.CASCADE, primary_key=True)
+    customer = models.OneToOneField(Customer, on_delete=models.CASCADE, primary_key=True, related_name='address')
     province = models.CharField(max_length=100)
     city = models.CharField(max_length=100)
     street = models.CharField(max_length=100)
@@ -72,7 +72,7 @@ class Cart(models.Model):
 
 class CartItem(models.Model):
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='items_added')
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='cart_items')
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')
     quantity = models.SmallIntegerField()
 
 
