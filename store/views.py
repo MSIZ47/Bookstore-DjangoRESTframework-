@@ -2,13 +2,26 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework import status
+from rest_framework.filters import SearchFilter, OrderingFilter
 from .models import *
 from . import serializers
 from .pagination import DefaultPagination
 from rest_framework.mixins import RetrieveModelMixin,CreateModelMixin,DestroyModelMixin
 from django.db.models import Prefetch
+from django_filters.rest_framework import DjangoFilterBackend
+from .filters import BookFilter
+
+
 class BookViewSet(ModelViewSet):
     queryset = Book.objects.select_related('category').prefetch_related('images').all()
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = BookFilter
+    search_fields = ['title',]
+    ordering_fields = ['price', 'date_time_modified']
+
+
+
+
     
     serializer_class = serializers.BookSerializer
     def get_serializer_context(self):
@@ -48,7 +61,7 @@ class CommentViewSet(ModelViewSet):
 class CategoryViewSet(ModelViewSet):
     def get_queryset(self):
         return Category.objects.prefetch_related('books').all()
-
+    
     serializer_class = serializers.CategorySerializer
 
     pagination_class = DefaultPagination
