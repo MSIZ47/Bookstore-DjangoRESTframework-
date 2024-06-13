@@ -36,14 +36,14 @@ class Book(models.Model):
 
 
 class BookImage(models.Model):
-    image = models.ImageField(upload_to='store/images')    
+    image = models.ImageField(upload_to='store/images', null=True, blank=True)    
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='images')
 
 
 class Customer(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     phone = models.CharField(max_length=11)
-    birth_date = models.DateField(blank=True)
+    birth_date = models.DateField(null= True,blank=True)
 
     @admin.display(ordering='user__first_name')
     def first_name(self):

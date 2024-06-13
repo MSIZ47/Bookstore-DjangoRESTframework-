@@ -60,10 +60,18 @@ class SimpleAddressSerializer(serializers.ModelSerializer):
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
-        fields = ['id', 'user', 'phone', 'birth_date', 'address']
-    user = serializers.StringRelatedField()
+        fields = ['id', 'user_id', 'phone', 'birth_date', 'address']
+    user_id = serializers.IntegerField(read_only=True)
     address = SimpleAddressSerializer()
 
+    def update(self, instance, validated_data):
+        address_data = validated_data.pop('address', None)
+        if address_data:
+            address_serializer = SimpleAddressSerializer(instance=instance.address, data=address_data)
+            address_serializer.is_valid(raise_exception=True)
+            address_serializer.save()
+
+        return super().update(instance, validated_data)
 
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -72,14 +80,14 @@ class AddressSerializer(serializers.ModelSerializer):
     customer = serializers.StringRelatedField()
     
     def create(self, validated_data):
-        customer_id_or_user_id = self.context['user_id']
-        customer = Customer.objects.get(id =customer_id_or_user_id)
+        customer_id = self.context['customer_id']
+        customer = Customer.objects.get(id =customer_id)
 
         if hasattr(customer, 'address'):
             raise serializers.ValidationError("Address already exists for this customer.")
 
         validated_data['customer'] = customer
-        return Address.objects.create(customer_id = self.context['user_id'], **validated_data)
+        return Address.objects.create(customer_id = self.context['customer_id'], **validated_data)
     
 
 
