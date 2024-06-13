@@ -3,11 +3,13 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework import status
 from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.decorators import action, permission_classes
 from .models import *
 from . import serializers
 from .pagination import DefaultPagination
 from rest_framework.mixins import RetrieveModelMixin,CreateModelMixin,DestroyModelMixin
 from django.db.models import Prefetch
+
 from django_filters.rest_framework import DjangoFilterBackend
 from .filters import BookFilter
 
@@ -76,6 +78,22 @@ class CustomerViewSet(ModelViewSet):
         return Customer.objects.select_related('user').prefetch_related('address').all()
     serializer_class = serializers.CustomerSerializer
 
+    @action(detail=False ,methods=['GET','PUT'])
+    def me(self,request):
+        try:
+            customer = Customer.objects.get(user_id=request.user.id)
+        except Customer.DoesNotExist:
+            return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if request.method == 'GET':
+            serializer =  serializers.CustomerSerializer(customer)
+            return Response(serializer.data)
+        elif request.method == 'PUT':
+            serializer = serializers.CustomerSerializer(instance=customer, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        
 
 class AddressViewSet(ModelViewSet):
     def get_queryset(self):
@@ -83,7 +101,7 @@ class AddressViewSet(ModelViewSet):
     serializer_class = serializers.AddressSerializer
 
     def get_serializer_context(self):
-        return {'user_id': self.request.user.id}
+        return {'customer_id': self.kwargs['customer_pk']}
     
 
 
