@@ -6,8 +6,10 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.decorators import action, permission_classes
 from .models import *
 from . import serializers
+from .serializers import CustomerSerializer, AddressSerializer
 from .pagination import DefaultPagination
 from rest_framework.mixins import RetrieveModelMixin,CreateModelMixin,DestroyModelMixin
+from rest_framework.permissions import IsAuthenticated,IsAdminUser
 from django.db.models import Prefetch
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -20,12 +22,9 @@ class BookViewSet(ModelViewSet):
     filterset_class = BookFilter
     search_fields = ['title',]
     ordering_fields = ['price', 'date_time_modified']
-
-
-
-
-    
     serializer_class = serializers.BookSerializer
+    
+    
     def get_serializer_context(self):
         return {'request': self.request}
     
@@ -74,34 +73,41 @@ class CategoryViewSet(ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 class CustomerViewSet(ModelViewSet):
-    def get_queryset(self):
-        return Customer.objects.select_related('user').prefetch_related('address').all()
-    serializer_class = serializers.CustomerSerializer
+    serializer_class = CustomerSerializer
 
-    @action(detail=False ,methods=['GET','PUT'])
-    def me(self,request):
+    def get_queryset(self):
+        return Customer.objects.select_related('user', 'address').all()
+
+    @action(detail=False, methods=['GET', 'PUT'])
+    def me(self, request):
         try:
+            # Get the customer object linked to the authenticated user
             customer = Customer.objects.get(user_id=request.user.id)
         except Customer.DoesNotExist:
             return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+
+        # Handle GET request
         if request.method == 'GET':
-            serializer =  serializers.CustomerSerializer(customer)
+            serializer = CustomerSerializer(customer)
             return Response(serializer.data)
+
+        # Handle PUT request
         elif request.method == 'PUT':
-            serializer = serializers.CustomerSerializer(instance=customer, data=request.data)
+            serializer = CustomerSerializer(instance=customer, data=request.data, context={'customer_id': customer.id})
             serializer.is_valid(raise_exception=True)
             serializer.save()
             return Response(serializer.data)
-        
+
 
 class AddressViewSet(ModelViewSet):
+    serializer_class = AddressSerializer
+
     def get_queryset(self):
-        return Address.objects.select_related('customer').filter(customer_id = self.kwargs['customer_pk'])
-    serializer_class = serializers.AddressSerializer
+        return Address.objects.filter(customer_id=self.kwargs['customer_pk'])
 
     def get_serializer_context(self):
         return {'customer_id': self.kwargs['customer_pk']}
+
     
 
 

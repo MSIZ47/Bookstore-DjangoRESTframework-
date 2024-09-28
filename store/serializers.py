@@ -56,39 +56,79 @@ class SimpleAddressSerializer(serializers.ModelSerializer):
         fields = ['province', 'city', 'street', 'detail']
 
 
-        
-class CustomerSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Customer
-        fields = ['id', 'user_id', 'phone', 'birth_date', 'address']
-    user_id = serializers.IntegerField(read_only=True)
-    address = SimpleAddressSerializer()
-
-    def update(self, instance, validated_data):
-        address_data = validated_data.pop('address', None)
-        if address_data:
-            address_serializer = SimpleAddressSerializer(instance=instance.address, data=address_data)
-            address_serializer.is_valid(raise_exception=True)
-            address_serializer.save()
-
-        return super().update(instance, validated_data)
-
 class AddressSerializer(serializers.ModelSerializer):
+    customer = serializers.StringRelatedField(read_only=True)  # To display customer in a readable format
+
     class Meta:
         model = Address
-        fields = ['customer_id','customer', 'province', 'city', 'street', 'detail']
-    customer = serializers.StringRelatedField()
-    
-    def create(self, validated_data):
-        customer_id = self.context['customer_id']
-        customer = Customer.objects.get(id =customer_id)
+        fields = ['customer_id', 'customer', 'province', 'city', 'street', 'detail']
+        extra_kwargs = {'customer_id': {'read_only': True}}  # customer_id should not be writable
 
+    def create(self, validated_data):
+        # Get customer_id from context
+        customer_id = self.context.get('customer_id')
+
+        # Ensure customer_id is present in the context
+        if not customer_id:
+            raise serializers.ValidationError("Customer ID is required.")
+
+        # Fetch the customer instance
+        customer = Customer.objects.get(id=customer_id)
+
+        # Prevent creating multiple addresses for the same customer
         if hasattr(customer, 'address'):
             raise serializers.ValidationError("Address already exists for this customer.")
 
+        # Set customer and create address
         validated_data['customer'] = customer
-        return Address.objects.create(customer_id = self.context['customer_id'], **validated_data)
-    
+        return Address.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        # Update address fields
+        instance.province = validated_data.get('province', instance.province)
+        instance.city = validated_data.get('city', instance.city)
+        instance.street = validated_data.get('street', instance.street)
+        instance.detail = validated_data.get('detail', instance.detail)
+
+        # Save the updated address
+        instance.save()
+        return instance
+
+        
+class CustomerSerializer(serializers.ModelSerializer):
+    address = AddressSerializer()  # Use AddressSerializer to handle address data
+
+    class Meta:
+        model = Customer
+        fields = ['id', 'user_id', 'phone', 'birth_date', 'address']
+        read_only_fields = ['user_id']
+
+    def update(self, instance, validated_data):
+        # Extract address data if present in the request
+        address_data = validated_data.pop('address', None)
+
+        # Handle address create or update
+        if address_data:
+            # Check if the customer already has an address
+            if hasattr(instance, 'address'):
+                # Update existing address
+                address_serializer = AddressSerializer(instance=instance.address, data=address_data, context={'customer_id': instance.id})
+            else:
+                # Create a new address if the customer doesn't have one
+                address_serializer = AddressSerializer(data=address_data, context={'customer_id': instance.id})
+
+            # Validate and save the address
+            address_serializer.is_valid(raise_exception=True)
+            address_serializer.save()
+
+        # Update the customer data (phone, birth_date)
+        return super().update(instance, validated_data)
+
+
+
+
+
+
 
 
 class DiscountSerializer(serializers.ModelSerializer):
