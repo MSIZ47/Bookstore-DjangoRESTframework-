@@ -8,12 +8,13 @@ from .models import *
 from . import serializers
 from .serializers import CustomerSerializer, AddressSerializer
 from .pagination import DefaultPagination
-from rest_framework.mixins import RetrieveModelMixin,CreateModelMixin,DestroyModelMixin
-from rest_framework.permissions import IsAuthenticated,IsAdminUser
+from rest_framework.mixins import RetrieveModelMixin,CreateModelMixin,DestroyModelMixin,ListModelMixin
+from rest_framework.permissions import IsAuthenticated,IsAdminUser,IsAuthenticatedOrReadOnly
 from django.db.models import Prefetch
-
+from .permissions import IsAdminOrReadOnly, IsSelfOrAdmin
 from django_filters.rest_framework import DjangoFilterBackend
 from .filters import BookFilter
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
 
 
 class BookViewSet(ModelViewSet):
@@ -23,6 +24,7 @@ class BookViewSet(ModelViewSet):
     search_fields = ['title',]
     ordering_fields = ['price', 'date_time_modified']
     serializer_class = serializers.BookSerializer
+    permission_classes = [IsAdminOrReadOnly]
     
     
     def get_serializer_context(self):
@@ -37,6 +39,7 @@ class BookViewSet(ModelViewSet):
     pagination_class = DefaultPagination
 
 class BookImageViewSet(ModelViewSet):
+    permission_classes = [IsAdminOrReadOnly]
     def get_queryset(self):
         return BookImage.objects.filter(book_id=self.kwargs['book_pk'])
     
@@ -51,7 +54,7 @@ class CommentViewSet(ModelViewSet):
         return Comment.objects.select_related('book').filter(book_id = self.kwargs['book_pk'])
     
     serializer_class = serializers.CommentSerializer
-
+    permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = DefaultPagination
     
     def get_serializer_context(self):
@@ -60,6 +63,7 @@ class CommentViewSet(ModelViewSet):
 
 
 class CategoryViewSet(ModelViewSet):
+    permission_classes = [IsAdminOrReadOnly]
     def get_queryset(self):
         return Category.objects.prefetch_related('books').all()
     
@@ -72,26 +76,41 @@ class CategoryViewSet(ModelViewSet):
             return Response({'error':'this category has one or more book in it.delete books first!'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         return super().destroy(request, *args, **kwargs)
 
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
+
 class CustomerViewSet(ModelViewSet):
     serializer_class = CustomerSerializer
 
     def get_queryset(self):
         return Customer.objects.select_related('user', 'address').all()
 
-    @action(detail=False, methods=['GET', 'PUT'])
+    # Restrict create and individual customer retrieval (retrieve action) to admins only
+    def get_permissions(self):
+        if self.action == 'list':  # Only admins can access /store/customers
+            return [IsAdminUser()]
+        elif self.action in ['retrieve']:  # Only admins can access /store/customers/1
+            return [IsAdminUser()]
+        elif self.action in ['update', 'partial_update', 'destroy']:  # Admins can update or delete customers
+            return [IsAdminUser()]
+        elif self.action == 'me':  # Authenticated users can access /store/customers/me
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    # Block creation of customers
+    def create(self, request, *args, **kwargs):
+        raise MethodNotAllowed('POST', detail='Customer creation is not allowed.')
+
+    @action(detail=False, methods=['GET', 'PUT'], permission_classes=[IsAuthenticated])
     def me(self, request):
         try:
-            # Get the customer object linked to the authenticated user
             customer = Customer.objects.get(user_id=request.user.id)
         except Customer.DoesNotExist:
             return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Handle GET request
         if request.method == 'GET':
             serializer = CustomerSerializer(customer)
             return Response(serializer.data)
 
-        # Handle PUT request
         elif request.method == 'PUT':
             serializer = CustomerSerializer(instance=customer, data=request.data, context={'customer_id': customer.id})
             serializer.is_valid(raise_exception=True)
@@ -99,20 +118,34 @@ class CustomerViewSet(ModelViewSet):
             return Response(serializer.data)
 
 
+
 class AddressViewSet(ModelViewSet):
     serializer_class = AddressSerializer
 
     def get_queryset(self):
+        # Ensure only admins can access /store/customers/<id>/address
+        if not self.request.user.is_staff:
+            raise PermissionDenied("Only admins can access this endpoint.")
         return Address.objects.filter(customer_id=self.kwargs['customer_pk'])
+
+    def get_permissions(self):
+        # Block address creation (POST) for everyone
+        if self.action == 'create':
+            raise MethodNotAllowed("POST", detail="Address creation is not allowed.")
+        
+        # Allow only admins to access /store/customers/<id>/address
+        if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
+            return [IsAdminUser()]
+        
+        return [IsAuthenticated()]
 
     def get_serializer_context(self):
         return {'customer_id': self.kwargs['customer_pk']}
-
     
 
 
 class DiscountViewSet(ModelViewSet):
-
+    permission_classes = [IsAdminOrReadOnly]
     queryset = Discount.objects.prefetch_related('books').all()
     serializer_class = serializers.DiscountSerializer
     pagination_class  = DefaultPagination
@@ -139,6 +172,7 @@ class CartViewSet(GenericViewSet,
                   CreateModelMixin,
                   DestroyModelMixin,
                   RetrieveModelMixin):
+    permission_classes = [IsAuthenticated]
     queryset = Cart.objects.prefetch_related('items__book').all()
     serializer_class = serializers.CartSerializer
 
